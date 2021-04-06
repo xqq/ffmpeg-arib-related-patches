@@ -1,0 +1,69 @@
+From 8ab7f4256d4ec0029d5a6c9d78c92fea7782233a Mon Sep 17 00:00:00 2001
+From: zheng qian <xqq@xqq.im>
+Date: Tue, 6 Apr 2021 16:31:59 +0900
+Subject: [PATCH v1 1/2] libavformat/mpegts: Extract arib_caption descriptor
+ data into codecpar->extradata
+
+The recognization of ARIB STD-B24 caption has been introduced in commit a03885b,
+which is used as closed caption in Japanese / Brazilian Digital Television.
+
+But whenever copying arib_caption into mpegts output, arib_caption inside the
+outputted stream cannot be recgonized as a arib_caption subtitle track once again,
+which is caused by the missing of descriptors in the PMT table.
+
+These patches are intended to fix broken stream copying of arib_caption subtitle.
+
+This patch extracts necessary fields into codecpar->extradata for future remuxing,
+which describe the stream_identifier, the profile and other additional information.
+
+Signed-off-by: zheng qian <xqq@xqq.im>
+---
+ libavformat/mpegts.c | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/libavformat/mpegts.c b/libavformat/mpegts.c
+index 6e0d9d7496..a6a534a277 100644
+--- a/libavformat/mpegts.c
++++ b/libavformat/mpegts.c
+@@ -2107,6 +2107,9 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
+         // STD-B24, fascicle 3, chapter 4 defines private_stream_1
+         // for captions
+         if (stream_type == STREAM_TYPE_PRIVATE_DATA) {
++            if (desc_len < 3)
++                return AVERROR_INVALIDDATA;
++
+             // This structure is defined in STD-B10, part 1, listing 5.4 and
+             // part 2, 6.2.20).
+             // Listing of data_component_ids is in STD-B10, part 2, Annex J.
+@@ -2145,6 +2148,28 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
+             st->codecpar->codec_id   = AV_CODEC_ID_ARIB_CAPTION;
+             st->codecpar->profile    = picked_profile;
+             st->internal->request_probe        = 0;
++
++            // Store stream_identifier and payload of data_component_descriptor
++            // (data_component_id & additional_arib_caption_info) as extradata.
++            // data_component_descriptor is defined in ARIB STD-B10, part 2, 6.2.20
++            // These will be useful for remuxing arib_caption into mpegts output.
++            if (!st->codecpar->extradata) {
++                st->codecpar->extradata = av_mallocz(4 + AV_INPUT_BUFFER_PADDING_SIZE);
++                if (!st->codecpar->extradata)
++                    return AVERROR(ENOMEM);
++
++                st->codecpar->extradata_size = 4;
++
++                // stream_identifier (component_tag of stream_identifier_descriptor)
++                st->codecpar->extradata[0] = (uint8_t)(st->stream_identifier - 1);
++
++                // payload of data_component_descriptor structure
++                // data_component_id
++                st->codecpar->extradata[1] = (uint8_t)((data_component_id & 0xF0) >> 8);
++                st->codecpar->extradata[2] = (uint8_t)(data_component_id & 0x0F);
++                // additional_arib_caption_info, defined in ARIB STD-B24, fascicle 1, Part 3, 9.6.1
++                st->codecpar->extradata[3] = get8(pp, desc_end);
++            }
+         }
+         break;
+     case 0xb0: /* DOVI video stream descriptor */
+-- 
+2.29.2
+
