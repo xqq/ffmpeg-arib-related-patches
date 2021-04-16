@@ -1,0 +1,79 @@
+From 36b31d5828a09ac7e823d8ef4098ea20e7f12275 Mon Sep 17 00:00:00 2001
+From: zheng qian <xqq@xqq.im>
+Date: Thu, 15 Apr 2021 23:52:17 +0900
+Subject: [PATCH v3 1/1] avformat/mpegtsenc: Write necessary descriptors into
+ PMT for arib_caption muxing
+
+Changes since v2:
+  Generate stream_identifier and data_component_id from profile
+
+The recognization of ARIB STD-B24 caption has been introduced
+in commit a03885b, which is used as closed caption in
+Japanese / Brazilian Digital Television.
+
+But arib_caption stream copy is not working correctly caused by
+the missing of descriptors in PMT. ARIB caption data inside
+remuxed mpegts stream could not be recognized as an arib_caption
+subtitle track once again because of the missing of descriptors.
+
+This patch writes stream_identifier_descriptor and
+data_component_descriptor by generating stream_identifier and
+data_component_id from ARIB profile.
+
+arib_caption remuxing could be worked correctly through this patch.
+
+Signed-off-by: zheng qian <xqq@xqq.im>
+---
+ libavformat/mpegtsenc.c | 29 +++++++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/libavformat/mpegtsenc.c b/libavformat/mpegtsenc.c
+index a357f3a6aa..f302af84ff 100644
+--- a/libavformat/mpegtsenc.c
++++ b/libavformat/mpegtsenc.c
+@@ -357,6 +357,7 @@ static int get_dvb_stream_type(AVFormatContext *s, AVStream *st)
+         break;
+     case AV_CODEC_ID_DVB_SUBTITLE:
+     case AV_CODEC_ID_DVB_TELETEXT:
++    case AV_CODEC_ID_ARIB_CAPTION:
+         stream_type = STREAM_TYPE_PRIVATE_DATA;
+         break;
+     case AV_CODEC_ID_SMPTE_KLV:
+@@ -714,6 +715,34 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
+                }
+ 
+                *len_ptr = q - len_ptr - 1;
++            } else if (codec_id == AV_CODEC_ID_ARIB_CAPTION) {
++                uint8_t stream_identifier;
++                uint16_t data_component_id;
++
++                if (st->codecpar->profile == FF_PROFILE_ARIB_PROFILE_A) {
++                    // non-mobile captioning service ("profile A")
++                    stream_identifier = 0x30;
++                    data_component_id = 0x0008;
++                } else if (st->codecpar->profile == FF_PROFILE_ARIB_PROFILE_C) {
++                    // (1seg) captioning service ("profile C")
++                    stream_identifier = 0x87;
++                    data_component_id = 0x0012;
++                } else {
++                    break;
++                }
++
++                // stream_identifier_descriptor
++                *q++ = 0x52;  // descriptor_tag
++                *q++ = 1;     // descriptor_length
++                *q++ = stream_identifier;  // component_tag: stream_identifier
++
++                // data_component_descriptor, defined in ARIB STD-B10, part 2, 6.2.20
++                *q++ = 0xFD;  // descriptor_tag: ARIB data coding type descriptor
++                *q++ = 3;     // descriptor_length
++                put16(&q, data_component_id);  // data_component_id
++                // additional_arib_caption_info: defined in ARIB STD-B24, fascicle 1, Part 3, 9.6.1
++                // Use most commonly used value 0x3D: DMF(0x3), Reserved(0x3), Timing(0x1)
++                *q++ = 0x3D;
+             }
+         break;
+         case AVMEDIA_TYPE_VIDEO:
+-- 
+2.29.2
+
