@@ -1,0 +1,203 @@
+From 1bcb90ce4737b8371748045a4fb72488bc92015e Mon Sep 17 00:00:00 2001
+From: zheng qian <xqq@xqq.im>
+Date: Tue, 20 Apr 2021 01:40:47 +0900
+Subject: [PATCH] avformat/mpegtsenc: Fix mpegts_write_pes() for
+ private_stream_2 and other types
+
+According to the PES packet definition defined in Table 2-17
+of ISO_IEC_13818-1 specification, some fields like PTS/DTS or
+pes_extension could only appears if the stream_id meets the
+condition:
+
+if (stream_id != 0xBC &&  // program_stream_map
+stream_id != 0xBE &&  // padding_stream
+stream_id != 0xBF &&  // private_stream_2
+stream_id != 0xF0 &&  // ECM
+stream_id != 0xF1 &&  // EMM
+stream_id != 0xFF &&  // program_stream_directory
+stream_id != 0xF2 &&  // DSMCC_stream
+stream_id != 0xF8)     // ITU-T Rec. H.222.1 type E stream
+
+And the following stream_id types don't have fields like PTS/DTS:
+
+else if ( stream_id == program_stream_map
+|| stream_id == private_stream_2
+|| stream_id == ECM
+|| stream_id == EMM
+|| stream_id == program_stream_directory
+|| stream_id == DSMCC_stream
+|| stream_id == ITU-T Rec. H.222.1 type E stream ) {
+    for (i = 0; i < PES_packet_length; i++) {
+        PES_packet_data_byte
+    }
+}
+
+Current implementation skipped the judgement of stream_id
+causing some kind of stream like private_stream_2 to be
+incorrectly written with PTS/DTS field. For example,
+Japan DTV transmits news and alerts through ARIB superimpose
+that utilizes private_stream_2 still could not be remuxed
+correctly for now.
+
+This patch fixes the remuxing of private_stream_2 and other
+stream_id types.
+
+Signed-off-by: zheng qian <xqq@xqq.im>
+---
+ libavformat/mpegtsenc.c | 108 ++++++++++++++++++++++------------------
+ 1 file changed, 60 insertions(+), 48 deletions(-)
+
+diff --git a/libavformat/mpegtsenc.c b/libavformat/mpegtsenc.c
+index f302af84ff..da8fb381e5 100644
+--- a/libavformat/mpegtsenc.c
++++ b/libavformat/mpegtsenc.c
+@@ -1445,28 +1445,28 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
+             is_dvb_teletext = 0;
+             if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+                 if (st->codecpar->codec_id == AV_CODEC_ID_DIRAC)
+-                    *q++ = STREAM_ID_EXTENDED_STREAM_ID;
++                    stream_id = STREAM_ID_EXTENDED_STREAM_ID;
+                 else
+-                    *q++ = STREAM_ID_VIDEO_STREAM_0;
++                    stream_id = STREAM_ID_VIDEO_STREAM_0;
+             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
+                        (st->codecpar->codec_id == AV_CODEC_ID_MP2 ||
+                         st->codecpar->codec_id == AV_CODEC_ID_MP3 ||
+                         st->codecpar->codec_id == AV_CODEC_ID_AAC)) {
+-                *q++ = STREAM_ID_AUDIO_STREAM_0;
++                stream_id = STREAM_ID_AUDIO_STREAM_0;
+             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
+                         st->codecpar->codec_id == AV_CODEC_ID_AC3 &&
+                         ts->m2ts_mode) {
+-                *q++ = STREAM_ID_EXTENDED_STREAM_ID;
++                stream_id = STREAM_ID_EXTENDED_STREAM_ID;
+             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA &&
+                        st->codecpar->codec_id == AV_CODEC_ID_TIMED_ID3) {
+-                *q++ = STREAM_ID_PRIVATE_STREAM_1;
++                stream_id = STREAM_ID_PRIVATE_STREAM_1;
+             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
+-                *q++ = stream_id != -1 ? stream_id : STREAM_ID_METADATA_STREAM;
++                stream_id = stream_id != -1 ? stream_id : STREAM_ID_METADATA_STREAM;
+ 
+                 if (stream_id == STREAM_ID_PRIVATE_STREAM_1) /* asynchronous KLV */
+                     pts = dts = AV_NOPTS_VALUE;
+             } else {
+-                *q++ = STREAM_ID_PRIVATE_STREAM_1;
++                stream_id = STREAM_ID_PRIVATE_STREAM_1;
+                 if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+                     if (st->codecpar->codec_id == AV_CODEC_ID_DVB_SUBTITLE) {
+                         is_dvb_subtitle = 1;
+@@ -1475,6 +1475,7 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
+                     }
+                 }
+             }
++            *q++ = stream_id;
+             header_len = 0;
+             flags      = 0;
+             if (pts != AV_NOPTS_VALUE) {
+@@ -1524,50 +1525,61 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
+             }
+             *q++ = len >> 8;
+             *q++ = len;
+-            val  = 0x80;
+-            /* data alignment indicator is required for subtitle and data streams */
+-            if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE || st->codecpar->codec_type == AVMEDIA_TYPE_DATA)
+-                val |= 0x04;
+-            *q++ = val;
+-            *q++ = flags;
+-            *q++ = header_len;
+-            if (pts != AV_NOPTS_VALUE) {
+-                write_pts(q, flags >> 6, pts);
+-                q += 5;
+-            }
+-            if (dts != AV_NOPTS_VALUE && pts != AV_NOPTS_VALUE && dts != pts) {
+-                write_pts(q, 1, dts);
+-                q += 5;
+-            }
+-            if (pes_extension && st->codecpar->codec_id == AV_CODEC_ID_DIRAC) {
+-                flags = 0x01;  /* set PES_extension_flag_2 */
+-                *q++  = flags;
+-                *q++  = 0x80 | 0x01; /* marker bit + extension length */
+-                /* Set the stream ID extension flag bit to 0 and
+-                 * write the extended stream ID. */
+-                *q++ = 0x00 | 0x60;
+-            }
+-            /* For Blu-ray AC3 Audio Setting extended flags */
+-            if (ts->m2ts_mode &&
+-                pes_extension &&
+-                st->codecpar->codec_id == AV_CODEC_ID_AC3) {
+-                flags = 0x01; /* set PES_extension_flag_2 */
++
++            if (stream_id != 0xBC &&  // program_stream_map
++                stream_id != 0xBE &&  // padding_stream
++                stream_id != 0xBF &&  // private_stream_2
++                stream_id != 0xF0 &&  // ECM
++                stream_id != 0xF1 &&  // EMM
++                stream_id != 0xFF &&  // program_stream_directory
++                stream_id != 0xF2 &&  // DSMCC_stream
++                stream_id != 0xF8) {  // ITU-T Rec. H.222.1 type E stream
++
++                val  = 0x80;
++                /* data alignment indicator is required for subtitle and data streams */
++                if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE || st->codecpar->codec_type == AVMEDIA_TYPE_DATA)
++                    val |= 0x04;
++                *q++ = val;
+                 *q++ = flags;
+-                *q++ = 0x80 | 0x01; /* marker bit + extension length */
+-                *q++ = 0x00 | 0x71; /* for AC3 Audio (specifically on blue-rays) */
+-            }
++                *q++ = header_len;
++                if (pts != AV_NOPTS_VALUE) {
++                    write_pts(q, flags >> 6, pts);
++                    q += 5;
++                }
++                if (dts != AV_NOPTS_VALUE && pts != AV_NOPTS_VALUE && dts != pts) {
++                    write_pts(q, 1, dts);
++                    q += 5;
++                }
++                if (pes_extension && st->codecpar->codec_id == AV_CODEC_ID_DIRAC) {
++                    flags = 0x01;  /* set PES_extension_flag_2 */
++                    *q++  = flags;
++                    *q++  = 0x80 | 0x01; /* marker bit + extension length */
++                    /* Set the stream ID extension flag bit to 0 and
++                    * write the extended stream ID. */
++                    *q++ = 0x00 | 0x60;
++                }
++                /* For Blu-ray AC3 Audio Setting extended flags */
++                if (ts->m2ts_mode &&
++                    pes_extension &&
++                    st->codecpar->codec_id == AV_CODEC_ID_AC3) {
++                    flags = 0x01; /* set PES_extension_flag_2 */
++                    *q++ = flags;
++                    *q++ = 0x80 | 0x01; /* marker bit + extension length */
++                    *q++ = 0x00 | 0x71; /* for AC3 Audio (specifically on blue-rays) */
++                }
+ 
+ 
+-            if (is_dvb_subtitle) {
+-                /* First two fields of DVB subtitles PES data:
+-                 * data_identifier: for DVB subtitle streams shall be coded with the value 0x20
+-                 * subtitle_stream_id: for DVB subtitle stream shall be identified by the value 0x00 */
+-                *q++ = 0x20;
+-                *q++ = 0x00;
+-            }
+-            if (is_dvb_teletext) {
+-                memset(q, 0xff, pes_header_stuffing_bytes);
+-                q += pes_header_stuffing_bytes;
++                if (is_dvb_subtitle) {
++                    /* First two fields of DVB subtitles PES data:
++                    * data_identifier: for DVB subtitle streams shall be coded with the value 0x20
++                    * subtitle_stream_id: for DVB subtitle stream shall be identified by the value 0x00 */
++                    *q++ = 0x20;
++                    *q++ = 0x00;
++                }
++                if (is_dvb_teletext) {
++                    memset(q, 0xff, pes_header_stuffing_bytes);
++                    q += pes_header_stuffing_bytes;
++                }
+             }
+             is_start = 0;
+         }
+-- 
+2.29.2
+
