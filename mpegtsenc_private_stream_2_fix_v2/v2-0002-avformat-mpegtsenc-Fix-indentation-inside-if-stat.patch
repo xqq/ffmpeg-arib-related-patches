@@ -1,0 +1,114 @@
+From de492a9dc0ec37ba882e3db2f0f03d2d4fd25fdf Mon Sep 17 00:00:00 2001
+From: zheng qian <xqq@xqq.im>
+Date: Tue, 20 Apr 2021 12:32:37 +0900
+Subject: [PATCH v2 2/3] avformat/mpegtsenc: Fix indentation inside if
+ statement in mpegts_write_pes()
+
+Fix indentation caused by the added stream_id judgement
+
+Signed-off-by: zheng qian <xqq@xqq.im>
+---
+ libavformat/mpegtsenc.c | 84 ++++++++++++++++++++---------------------
+ 1 file changed, 42 insertions(+), 42 deletions(-)
+
+diff --git a/libavformat/mpegtsenc.c b/libavformat/mpegtsenc.c
+index 0c543c385b..4a20775af4 100644
+--- a/libavformat/mpegtsenc.c
++++ b/libavformat/mpegtsenc.c
+@@ -1534,51 +1534,51 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
+                 stream_id != 0xF2 &&  // DSMCC_stream
+                 stream_id != 0xF8) {  // ITU-T Rec. H.222.1 type E stream
+ 
+-            val  = 0x80;
+-            /* data alignment indicator is required for subtitle and data streams */
+-            if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE || st->codecpar->codec_type == AVMEDIA_TYPE_DATA)
+-                val |= 0x04;
+-            *q++ = val;
+-            *q++ = flags;
+-            *q++ = header_len;
+-            if (pts != AV_NOPTS_VALUE) {
+-                write_pts(q, flags >> 6, pts);
+-                q += 5;
+-            }
+-            if (dts != AV_NOPTS_VALUE && pts != AV_NOPTS_VALUE && dts != pts) {
+-                write_pts(q, 1, dts);
+-                q += 5;
+-            }
+-            if (pes_extension && st->codecpar->codec_id == AV_CODEC_ID_DIRAC) {
+-                flags = 0x01;  /* set PES_extension_flag_2 */
+-                *q++  = flags;
+-                *q++  = 0x80 | 0x01; /* marker bit + extension length */
+-                /* Set the stream ID extension flag bit to 0 and
+-                 * write the extended stream ID. */
+-                *q++ = 0x00 | 0x60;
+-            }
+-            /* For Blu-ray AC3 Audio Setting extended flags */
+-            if (ts->m2ts_mode &&
+-                pes_extension &&
+-                st->codecpar->codec_id == AV_CODEC_ID_AC3) {
+-                flags = 0x01; /* set PES_extension_flag_2 */
++                val  = 0x80;
++                /* data alignment indicator is required for subtitle and data streams */
++                if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE || st->codecpar->codec_type == AVMEDIA_TYPE_DATA)
++                    val |= 0x04;
++                *q++ = val;
+                 *q++ = flags;
+-                *q++ = 0x80 | 0x01; /* marker bit + extension length */
+-                *q++ = 0x00 | 0x71; /* for AC3 Audio (specifically on blue-rays) */
+-            }
++                *q++ = header_len;
++                if (pts != AV_NOPTS_VALUE) {
++                    write_pts(q, flags >> 6, pts);
++                    q += 5;
++                }
++                if (dts != AV_NOPTS_VALUE && pts != AV_NOPTS_VALUE && dts != pts) {
++                    write_pts(q, 1, dts);
++                    q += 5;
++                }
++                if (pes_extension && st->codecpar->codec_id == AV_CODEC_ID_DIRAC) {
++                    flags = 0x01;  /* set PES_extension_flag_2 */
++                    *q++  = flags;
++                    *q++  = 0x80 | 0x01; /* marker bit + extension length */
++                    /* Set the stream ID extension flag bit to 0 and
++                     * write the extended stream ID. */
++                    *q++ = 0x00 | 0x60;
++                }
++                /* For Blu-ray AC3 Audio Setting extended flags */
++                if (ts->m2ts_mode &&
++                    pes_extension &&
++                    st->codecpar->codec_id == AV_CODEC_ID_AC3) {
++                    flags = 0x01; /* set PES_extension_flag_2 */
++                    *q++ = flags;
++                    *q++ = 0x80 | 0x01; /* marker bit + extension length */
++                    *q++ = 0x00 | 0x71; /* for AC3 Audio (specifically on blue-rays) */
++                }
+ 
+ 
+-            if (is_dvb_subtitle) {
+-                /* First two fields of DVB subtitles PES data:
+-                 * data_identifier: for DVB subtitle streams shall be coded with the value 0x20
+-                 * subtitle_stream_id: for DVB subtitle stream shall be identified by the value 0x00 */
+-                *q++ = 0x20;
+-                *q++ = 0x00;
+-            }
+-            if (is_dvb_teletext) {
+-                memset(q, 0xff, pes_header_stuffing_bytes);
+-                q += pes_header_stuffing_bytes;
+-            }
++                if (is_dvb_subtitle) {
++                    /* First two fields of DVB subtitles PES data:
++                     * data_identifier: for DVB subtitle streams shall be coded with the value 0x20
++                     * subtitle_stream_id: for DVB subtitle stream shall be identified by the value 0x00 */
++                    *q++ = 0x20;
++                    *q++ = 0x00;
++                }
++                if (is_dvb_teletext) {
++                    memset(q, 0xff, pes_header_stuffing_bytes);
++                    q += pes_header_stuffing_bytes;
++                }
+             }
+             is_start = 0;
+         }
+-- 
+2.29.2
+

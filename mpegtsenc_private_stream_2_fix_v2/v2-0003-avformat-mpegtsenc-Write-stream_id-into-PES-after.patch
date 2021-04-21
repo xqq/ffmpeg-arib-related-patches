@@ -1,0 +1,67 @@
+From 846380bdb66c9842e90474e1764066265f3e76f3 Mon Sep 17 00:00:00 2001
+From: zheng qian <xqq@xqq.im>
+Date: Tue, 20 Apr 2021 13:31:08 +0900
+Subject: [PATCH v2 3/3] avformat/mpegtsenc: Write stream_id into PES after
+ stream_id decision
+
+Since stream_id will have effect on the existences of
+PES header fields like PTS/DTS, it should be better to
+guarantee stream_id variable to be identical with
+exact written value.
+
+Signed-off-by: zheng qian <xqq@xqq.im>
+---
+ libavformat/mpegtsenc.c | 15 ++++++++-------
+ 1 file changed, 8 insertions(+), 7 deletions(-)
+
+diff --git a/libavformat/mpegtsenc.c b/libavformat/mpegtsenc.c
+index 4a20775af4..0e9c978d74 100644
+--- a/libavformat/mpegtsenc.c
++++ b/libavformat/mpegtsenc.c
+@@ -1445,28 +1445,28 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
+             is_dvb_teletext = 0;
+             if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+                 if (st->codecpar->codec_id == AV_CODEC_ID_DIRAC)
+-                    *q++ = STREAM_ID_EXTENDED_STREAM_ID;
++                    stream_id = STREAM_ID_EXTENDED_STREAM_ID;
+                 else
+-                    *q++ = STREAM_ID_VIDEO_STREAM_0;
++                    stream_id = STREAM_ID_VIDEO_STREAM_0;
+             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
+                        (st->codecpar->codec_id == AV_CODEC_ID_MP2 ||
+                         st->codecpar->codec_id == AV_CODEC_ID_MP3 ||
+                         st->codecpar->codec_id == AV_CODEC_ID_AAC)) {
+-                *q++ = STREAM_ID_AUDIO_STREAM_0;
++                stream_id = STREAM_ID_AUDIO_STREAM_0;
+             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
+                         st->codecpar->codec_id == AV_CODEC_ID_AC3 &&
+                         ts->m2ts_mode) {
+-                *q++ = STREAM_ID_EXTENDED_STREAM_ID;
++                stream_id = STREAM_ID_EXTENDED_STREAM_ID;
+             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA &&
+                        st->codecpar->codec_id == AV_CODEC_ID_TIMED_ID3) {
+-                *q++ = STREAM_ID_PRIVATE_STREAM_1;
++                stream_id = STREAM_ID_PRIVATE_STREAM_1;
+             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
+-                *q++ = stream_id != -1 ? stream_id : STREAM_ID_METADATA_STREAM;
++                stream_id = stream_id != -1 ? stream_id : STREAM_ID_METADATA_STREAM;
+ 
+                 if (stream_id == STREAM_ID_PRIVATE_STREAM_1) /* asynchronous KLV */
+                     pts = dts = AV_NOPTS_VALUE;
+             } else {
+-                *q++ = STREAM_ID_PRIVATE_STREAM_1;
++                stream_id = STREAM_ID_PRIVATE_STREAM_1;
+                 if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+                     if (st->codecpar->codec_id == AV_CODEC_ID_DVB_SUBTITLE) {
+                         is_dvb_subtitle = 1;
+@@ -1475,6 +1475,7 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
+                     }
+                 }
+             }
++            *q++ = stream_id;
+             header_len = 0;
+             flags      = 0;
+             if (pts != AV_NOPTS_VALUE) {
+-- 
+2.29.2
+

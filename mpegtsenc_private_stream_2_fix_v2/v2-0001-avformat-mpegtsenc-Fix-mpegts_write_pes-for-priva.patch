@@ -1,0 +1,84 @@
+From 64551dbd60289717a6d00b4b94c4fedc3102c58d Mon Sep 17 00:00:00 2001
+From: zheng qian <xqq@xqq.im>
+Date: Tue, 20 Apr 2021 12:25:47 +0900
+Subject: [PATCH v2 1/3] avformat/mpegtsenc: Fix mpegts_write_pes() for
+ private_stream_2 and other types
+
+Changes since v1:
+  Separate if-statement and cosmetic changes into different commits
+
+According to the PES packet definition defined in Table 2-17
+of ISO_IEC_13818-1 specification, some fields like PTS/DTS or
+pes_extension could only appears if the stream_id meets the
+condition:
+
+if (stream_id != 0xBC &&  // program_stream_map
+stream_id != 0xBE &&  // padding_stream
+stream_id != 0xBF &&  // private_stream_2
+stream_id != 0xF0 &&  // ECM
+stream_id != 0xF1 &&  // EMM
+stream_id != 0xFF &&  // program_stream_directory
+stream_id != 0xF2 &&  // DSMCC_stream
+stream_id != 0xF8)     // ITU-T Rec. H.222.1 type E stream
+
+And the following stream_id types don't have fields like PTS/DTS:
+
+else if ( stream_id == program_stream_map
+|| stream_id == private_stream_2
+|| stream_id == ECM
+|| stream_id == EMM
+|| stream_id == program_stream_directory
+|| stream_id == DSMCC_stream
+|| stream_id == ITU-T Rec. H.222.1 type E stream ) {
+    for (i = 0; i < PES_packet_length; i++) {
+        PES_packet_data_byte
+    }
+}
+
+Current implementation skipped the judgement of stream_id
+causing some kind of stream like private_stream_2 to be
+incorrectly written with PTS/DTS field. For example,
+Japan DTV transmits news and alerts through ARIB superimpose
+that utilizes private_stream_2 still could not be remuxed
+correctly for now.
+
+This patch set fixes the remuxing for private_stream_2 and
+other stream_id types.
+
+Signed-off-by: zheng qian <xqq@xqq.im>
+---
+ libavformat/mpegtsenc.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/libavformat/mpegtsenc.c b/libavformat/mpegtsenc.c
+index f302af84ff..0c543c385b 100644
+--- a/libavformat/mpegtsenc.c
++++ b/libavformat/mpegtsenc.c
+@@ -1524,6 +1524,16 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
+             }
+             *q++ = len >> 8;
+             *q++ = len;
++
++            if (stream_id != 0xBC &&  // program_stream_map
++                stream_id != 0xBE &&  // padding_stream
++                stream_id != 0xBF &&  // private_stream_2
++                stream_id != 0xF0 &&  // ECM
++                stream_id != 0xF1 &&  // EMM
++                stream_id != 0xFF &&  // program_stream_directory
++                stream_id != 0xF2 &&  // DSMCC_stream
++                stream_id != 0xF8) {  // ITU-T Rec. H.222.1 type E stream
++
+             val  = 0x80;
+             /* data alignment indicator is required for subtitle and data streams */
+             if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE || st->codecpar->codec_type == AVMEDIA_TYPE_DATA)
+@@ -1569,6 +1579,7 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
+                 memset(q, 0xff, pes_header_stuffing_bytes);
+                 q += pes_header_stuffing_bytes;
+             }
++            }
+             is_start = 0;
+         }
+         /* header size */
+-- 
+2.29.2
+
