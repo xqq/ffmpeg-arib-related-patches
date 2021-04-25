@@ -1,0 +1,60 @@
+From b30724b21f68e43fff88d1fdf464bb08508737eb Mon Sep 17 00:00:00 2001
+From: zheng qian <xqq@xqq.im>
+Date: Sun, 25 Apr 2021 11:22:19 +0900
+Subject: [PATCH v4 3/4] avformat/mpegtsenc: Fix mpegts_write_pes() for
+ private_stream_2 and other types
+
+Changes since v3:
+  Use STREAM_ID_* constants in mpegts.h for stream_id judgement
+
+Current implementation skipped the judgement of stream_id
+causing some kind of stream like private_stream_2 to be
+incorrectly written with actually a private_stream_1-like
+PES header with PTS/DTS field. For example, Japan DTV transmits
+news and alerts through ARIB superimpose that utilizes
+private_stream_2 still could not be remuxed correctly for now.
+
+This patch set fixes the remuxing for private_stream_2 and
+other stream_id types.
+
+Signed-off-by: zheng qian <xqq@xqq.im>
+---
+ libavformat/mpegtsenc.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/libavformat/mpegtsenc.c b/libavformat/mpegtsenc.c
+index 48d724d646..e6fcecbaca 100644
+--- a/libavformat/mpegtsenc.c
++++ b/libavformat/mpegtsenc.c
+@@ -1479,6 +1479,16 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
+                 pts = dts = AV_NOPTS_VALUE;
+ 
+             header_len = 0;
++
++            if (stream_id != STREAM_ID_PROGRAM_STREAM_MAP &&
++                stream_id != STREAM_ID_PADDING_STREAM &&
++                stream_id != STREAM_ID_PRIVATE_STREAM_2 &&
++                stream_id != STREAM_ID_ECM_STREAM &&
++                stream_id != STREAM_ID_EMM_STREAM &&
++                stream_id != STREAM_ID_PROGRAM_STREAM_DIRECTORY &&
++                stream_id != STREAM_ID_DSMCC_STREAM &&
++                stream_id != STREAM_ID_TYPE_E_STREAM) {
++
+             flags      = 0;
+             if (pts != AV_NOPTS_VALUE) {
+                 header_len += 5;
+@@ -1572,6 +1582,11 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
+                 memset(q, 0xff, pes_header_stuffing_bytes);
+                 q += pes_header_stuffing_bytes;
+             }
++            } else {
++                len = payload_size;
++                *q++ = len >> 8;
++                *q++ = len;
++            }
+             is_start = 0;
+         }
+         /* header size */
+-- 
+2.29.2
+

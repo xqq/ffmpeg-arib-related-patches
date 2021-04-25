@@ -1,0 +1,38 @@
+From 325cab5fc89eb9d758ea8b6b734c3847285cc856 Mon Sep 17 00:00:00 2001
+From: zheng qian <xqq@xqq.im>
+Date: Sun, 25 Apr 2021 11:14:36 +0900
+Subject: [PATCH v4 1/4] avformat/mpegts: Add missing constants for MPEG-TS
+ stream_id definitions
+
+Signed-off-by: zheng qian <xqq@xqq.im>
+---
+ libavformat/mpegts.h | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/libavformat/mpegts.h b/libavformat/mpegts.h
+index 04874e0f42..224282b3ed 100644
+--- a/libavformat/mpegts.h
++++ b/libavformat/mpegts.h
+@@ -138,11 +138,19 @@
+ #define STREAM_TYPE_AUDIO_EAC3      0x87
+ 
+ /* ISO/IEC 13818-1 Table 2-22 */
++#define STREAM_ID_PROGRAM_STREAM_MAP 0xbc
+ #define STREAM_ID_PRIVATE_STREAM_1   0xbd
++#define STREAM_ID_PADDING_STREAM     0xbe
++#define STREAM_ID_PRIVATE_STREAM_2   0xbf
+ #define STREAM_ID_AUDIO_STREAM_0     0xc0
+ #define STREAM_ID_VIDEO_STREAM_0     0xe0
++#define STREAM_ID_ECM_STREAM         0xf0
++#define STREAM_ID_EMM_STREAM         0xf1
++#define STREAM_ID_DSMCC_STREAM       0xf2
++#define STREAM_ID_TYPE_E_STREAM      0xf8
+ #define STREAM_ID_METADATA_STREAM    0xfc
+ #define STREAM_ID_EXTENDED_STREAM_ID 0xfd
++#define STREAM_ID_PROGRAM_STREAM_DIRECTORY  0xff
+ 
+ /* ISO/IEC 13818-1 Table 2-45 */
+ #define VIDEO_STREAM_DESCRIPTOR      0x02
+-- 
+2.29.2
+
