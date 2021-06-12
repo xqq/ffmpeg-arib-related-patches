@@ -1,0 +1,29 @@
+From d1ce0b41ebbee5a96c070a56119ef88274ea4d11 Mon Sep 17 00:00:00 2001
+From: zheng qian <xqq@xqq.im>
+Date: Sat, 12 Jun 2021 18:20:03 +0900
+Subject: [PATCH 4/5] fftools/ffmpeg: Ignore PTS checking for arib_superimpose
+
+arib_superimpose codec doesn't has PTS (AV_NOPTS_VALUE)
+
+Signed-off-by: zheng qian <xqq@xqq.im>
+---
+ fftools/ffmpeg.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/fftools/ffmpeg.c b/fftools/ffmpeg.c
+index e97d879cb3..d60ab49533 100644
+--- a/fftools/ffmpeg.c
++++ b/fftools/ffmpeg.c
+@@ -824,7 +824,8 @@ static void write_packet(OutputFile *of, AVPacket *pkt, OutputStream *ost, int u
+         if ((st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO || st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO || st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) &&
+             pkt->dts != AV_NOPTS_VALUE &&
+             !(st->codecpar->codec_id == AV_CODEC_ID_VP9 && ost->stream_copy) &&
+-            ost->last_mux_dts != AV_NOPTS_VALUE) {
++            ost->last_mux_dts != AV_NOPTS_VALUE &&
++            st->codecpar->codec_id != AV_CODEC_ID_ARIB_SUPERIMPOSE) {
+             int64_t max = ost->last_mux_dts + !(s->oformat->flags & AVFMT_TS_NONSTRICT);
+             if (pkt->dts < max) {
+                 int loglevel = max - pkt->dts > 2 || st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO ? AV_LOG_WARNING : AV_LOG_DEBUG;
+-- 
+2.29.2
+

@@ -1,0 +1,51 @@
+From 8bd2cb538e2e56c659228b1d4b69c7989a9309d5 Mon Sep 17 00:00:00 2001
+From: zheng qian <xqq@xqq.im>
+Date: Sat, 12 Jun 2021 18:21:05 +0900
+Subject: [PATCH 5/5] avcodec/libaribb24: Enable decoding support for
+ arib_superimpose
+
+ARIB superimpose packet could also be decoded by libaribb24
+
+Signed-off-by: zheng qian <xqq@xqq.im>
+---
+ libavcodec/allcodecs.c  |  1 +
+ libavcodec/libaribb24.c | 14 ++++++++++++++
+ 2 files changed, 15 insertions(+)
+
+diff --git a/libavcodec/allcodecs.c b/libavcodec/allcodecs.c
+index 623db2a9fa..5d5b536e97 100644
+--- a/libavcodec/allcodecs.c
++++ b/libavcodec/allcodecs.c
+@@ -722,6 +722,7 @@ extern const AVCodec ff_qdmc_at_decoder;
+ extern const AVCodec ff_qdm2_at_decoder;
+ extern AVCodec ff_libaom_av1_encoder;
+ extern const AVCodec ff_libaribb24_decoder;
++extern const AVCodec ff_libaribb24_superimpose_decoder;
+ extern const AVCodec ff_libcelt_decoder;
+ extern const AVCodec ff_libcodec2_encoder;
+ extern const AVCodec ff_libcodec2_decoder;
+diff --git a/libavcodec/libaribb24.c b/libavcodec/libaribb24.c
+index 0766c0079d..afa43f8f50 100644
+--- a/libavcodec/libaribb24.c
++++ b/libavcodec/libaribb24.c
+@@ -393,3 +393,17 @@ const AVCodec ff_libaribb24_decoder = {
+     .priv_class= &aribb24_class,
+     .wrapper_name = "libaribb24",
+ };
++
++const AVCodec ff_libaribb24_superimpose_decoder = {
++    .name      = "libaribb24_superimpose",
++    .long_name = NULL_IF_CONFIG_SMALL("libaribb24 ARIB STD-B24 superimpose decoder"),
++    .type      = AVMEDIA_TYPE_SUBTITLE,
++    .id        = AV_CODEC_ID_ARIB_SUPERIMPOSE,
++    .priv_data_size = sizeof(Libaribb24Context),
++    .init      = libaribb24_init,
++    .close     = libaribb24_close,
++    .decode    = libaribb24_decode,
++    .flush     = libaribb24_flush,
++    .priv_class= &aribb24_class,
++    .wrapper_name = "libaribb24_superimpose",
++};
+-- 
+2.29.2
+
