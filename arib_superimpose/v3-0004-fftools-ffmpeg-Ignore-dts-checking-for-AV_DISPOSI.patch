@@ -1,0 +1,30 @@
+From 7c6caefa7a9fa3e001dd13c4c87ccc37b30a9034 Mon Sep 17 00:00:00 2001
+From: zheng qian <xqq@xqq.im>
+Date: Sat, 17 Jul 2021 11:24:11 +0900
+Subject: [PATCH v3 4/4] fftools/ffmpeg: Ignore dts checking for
+ AV_DISPOSITION_URGENT
+
+Stream with AV_DISPOSITION_URGENT disposition flag could be NOPTS.
+
+Signed-off-by: zheng qian <xqq@xqq.im>
+---
+ fftools/ffmpeg.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/fftools/ffmpeg.c b/fftools/ffmpeg.c
+index 1ac2e48600..a3b720748b 100644
+--- a/fftools/ffmpeg.c
++++ b/fftools/ffmpeg.c
+@@ -824,7 +824,8 @@ static void write_packet(OutputFile *of, AVPacket *pkt, OutputStream *ost, int u
+         if ((st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO || st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO || st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) &&
+             pkt->dts != AV_NOPTS_VALUE &&
+             !(st->codecpar->codec_id == AV_CODEC_ID_VP9 && ost->stream_copy) &&
+-            ost->last_mux_dts != AV_NOPTS_VALUE) {
++            ost->last_mux_dts != AV_NOPTS_VALUE &&
++            !(st->disposition & AV_DISPOSITION_URGENT)) {
+             int64_t max = ost->last_mux_dts + !(s->oformat->flags & AVFMT_TS_NONSTRICT);
+             if (pkt->dts < max) {
+                 int loglevel = max - pkt->dts > 2 || st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO ? AV_LOG_WARNING : AV_LOG_DEBUG;
+-- 
+2.29.2
+

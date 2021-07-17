@@ -1,0 +1,61 @@
+From 3811ed4718eb4e6e75b7f23146bdb6b13d9b318c Mon Sep 17 00:00:00 2001
+From: zheng qian <xqq@xqq.im>
+Date: Sat, 17 Jul 2021 10:58:05 +0900
+Subject: [PATCH v3 1/4] avformat: Introduce AV_DISPOSITION_URGENT disposition
+ flag for emergency alert
+
+This patchset introduces AV_DISPOSITION_URGENT disposition flag for
+marking stuffs which is expected to be shown immediately as received,
+and adds recognization/remuxing support for ARIB superimpose stream.
+
+ARIB superimpose is almost same as ARIB caption but is utilized to
+transmit emergency alert and newsflash in Japan DTV.
+
+Since superimpose is designed to be displayed immediately as received,
+ARIB superimpose utilizes mpegts private_stream_2 rather than the
+private_stream_1 that is used by arib_caption, which means superimpose
+packet doesn't have PTS/DTS (AV_NOPTS_VALUE).
+
+Purpose of introducing AV_DISPOSITION_URGENT is mainly:
+
+1) To be able to mark stuffs as "show as received", which could be NOPTS
+
+2) Let ffmpeg-based player to be able to recognize these stuffs such as
+ARIB superimpose stream, and extract data to render it onto screen
+
+3) Let mpegtsenc to be able to remux ARIB superimpose stream correctly
+
+Signed-off-by: zheng qian <xqq@xqq.im>
+---
+ libavformat/avformat.h | 1 +
+ libavformat/dump.c     | 2 ++
+ 2 files changed, 3 insertions(+)
+
+diff --git a/libavformat/avformat.h b/libavformat/avformat.h
+index 81d2ac38d0..6c7d3fb3a5 100644
+--- a/libavformat/avformat.h
++++ b/libavformat/avformat.h
+@@ -831,6 +831,7 @@ typedef struct AVStreamInternal AVStreamInternal;
+ #define AV_DISPOSITION_METADATA     0x40000
+ #define AV_DISPOSITION_DEPENDENT    0x80000 ///< dependent audio stream (mix_type=0 in mpegts)
+ #define AV_DISPOSITION_STILL_IMAGE 0x100000 ///< still images in video stream (still_picture_flag=1 in mpegts)
++#define AV_DISPOSITION_URGENT      0x200000 ///< stream which is expected to be shown immediately as received (emergency alert)
+ 
+ /**
+  * Options for behavior on timestamp wrap detection.
+diff --git a/libavformat/dump.c b/libavformat/dump.c
+index cf892de107..a987d097dc 100644
+--- a/libavformat/dump.c
++++ b/libavformat/dump.c
+@@ -610,6 +610,8 @@ static void dump_stream_format(const AVFormatContext *ic, int i,
+         av_log(NULL, AV_LOG_INFO, " (dependent)");
+     if (st->disposition & AV_DISPOSITION_STILL_IMAGE)
+         av_log(NULL, AV_LOG_INFO, " (still image)");
++    if (st->disposition & AV_DISPOSITION_URGENT)
++        av_log(NULL, AV_LOG_INFO, " (urgent)");
+     av_log(NULL, AV_LOG_INFO, "\n");
+ 
+     dump_metadata(NULL, st->metadata, "    ");
+-- 
+2.29.2
+
